@@ -1,0 +1,97 @@
+// --- ESTE ARCHIVO REPRESENTA EL CÓDIGO QUE CORRERÍA EN UN SERVIDOR SEGURO (Serverless Function) ---
+// Su ÚNICA función es calcular la previsión con la IA y guardarla en Firestore.
+// De esta forma, tu clave de API queda protegida y la web es instantánea.
+
+// Importaciones necesarias para Node.js (entorno Serverless)
+// En un entorno real, descomentarías estas líneas y harías la configuración.
+/* const { GoogleGenAI } = require("@google/genai");
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+*/
+
+// Datos actuales de la estación (Esto vendría de tu base de datos o API)
+const currentWeatherData = {
+    temp: "23.5°C",
+    humidity: "65%",
+    pressure: "995.8 hPa", // Presión bajando rápidamente = riesgo de tormenta/cambio brusco
+    wind_speed: "35 km/h",
+    wind_direction: "Suroeste",
+    rain_last_hour: "0 mm",
+};
+
+// ** IMPORTANTE: Aquí se simula la llamada a la IA de Gemini
+async function generateForecast(data) {
+    // En un script real, aquí usarías tu API Key SECRETA para llamar a Gemini
+    /*
+    const ai = new GoogleGenAI({ apiKey: "TU_API_KEY_SECRETA_AQUI" });
+    const prompt = `Analiza...` // El prompt iría aquí
+    const response = await ai.models.generateContent({ ... });
+    return JSON.parse(response.text);
+    */
+
+    // El siguiente prompt es lo que le enviarías a Gemini
+    const prompt = `Analiza estos datos meteorológicos y genera un pronóstico estructurado para una estación climática doméstica.
+Datos: ${JSON.stringify(data)}
+Genera un objeto JSON con las siguientes claves:
+1. simple_summary_title: Título conciso (Máx 5 palabras)
+2. simple_summary_text: Resumen de la situación actual y la conclusión más importante.
+3. current_analysis: Análisis detallado de los datos (Presión, Viento, Temperatura), enfocándose en la dinámica atmosférica (ascenso/descenso de presión). Utiliza un lenguaje profesional y explicativo.
+4. forecast_6h_points: Array de 4 a 6 puntos clave para las próximas 6 horas, detallando cómo evolucionarán las condiciones.
+5. forecast_3d_points: Array de 4 a 6 puntos clave para los próximos 3 días.
+6. alert_level: Uno de 'stable' (estable), 'vigilance' (vigilancia), o 'alert' (alerta) basado en la peligrosidad.
+7. timestamp: Fecha y hora de la generación.
+`;
+
+    // --- SIMULACIÓN DEL RESULTADO DE LA IA (Reflejando un riesgo de tormenta) ---
+    const analysisResult = {
+        simple_summary_title: "ALERTA: Descenso Rápido de Presión",
+        simple_summary_text: "La presión ha caído a 995.8 hPa junto a vientos fuertes del Suroeste (35 km/h). Esto indica la inminente llegada de un frente frío y alta probabilidad de tormentas en las próximas horas.",
+        current_analysis: "Se observa un panorama dinámico y de riesgo. La caída rápida en la presión atmosférica (995.8 hPa) es el indicador principal de un cambio meteorológico brusco, con el acercamiento de un sistema de bajas presiones. Los vientos sostenidos del Suroeste (35 km/h) son típicos de los frentes de tormenta. La humedad es moderada, pero con la entrada de aire frío y la convergencia de masas de aire, la formación de nubes de desarrollo vertical (Cumulonimbus) es altamente probable.",
+        forecast_6h_points: [
+            "⛈️ **Riesgo ALTO de Tormentas:** La probabilidad de precipitaciones intensas comenzará en las próximas 2 horas.",
+            "📉 **Caída de Temperatura:** La temperatura descenderá bruscamente tras el inicio de la lluvia.",
+            "💨 **Rachas de Viento:** Se esperan ráfagas que podrían superar los 50 km/h al inicio de la tormenta.",
+            "☔️ **Acumulación de Lluvia:** Se prevén acumulaciones significativas durante las primeras 3 horas.",
+            "⚡️ **Actividad Eléctrica:** Alta posibilidad de actividad eléctrica intensa.",
+        ],
+        forecast_3d_points: [
+            "🌧️ **Día 1:** Clima inestable. Tras la tormenta inicial, se mantendrán chubascos intermitentes.",
+            "🌥️ **Día 2:** Mejora gradual. El cielo se nublará menos, pero la presión se mantendrá baja.",
+            "🌞 **Día 3:** Estabilidad. Se espera que la presión comience a subir por la tarde, augurando un clima soleado para el día siguiente.",
+            "🌡️ **Temperaturas:** Las temperaturas se mantendrán por debajo del promedio para la estación.",
+            "💨 **Viento:** Disminución progresiva del viento durante el período, volviendo a la calma en el Día 3.",
+        ],
+        alert_level: 'alert', // Esto cambia el color del dashboard a ROJO
+        timestamp: new Date().toLocaleDateString('es-ES') + ' ' + new Date().toLocaleTimeString('es-ES'),
+    };
+
+    return analysisResult;
+}
+
+// ** FUNCIÓN PRINCIPAL DE EJECUCIÓN (Llamada por el trigger de Serverless)
+async function mainFunction(appId) {
+    console.log(`[SERVERLESS] Iniciando cálculo de previsión para App ID: ${appId}`);
+
+    try {
+        // 1. Obtener los datos y generar el análisis (Llamada a Gemini)
+        const newAnalysis = await generateForecast(currentWeatherData);
+
+        // 2. Conectar a Firestore (En un entorno Serverless - Omitido en este mock)
+        // const db = getFirestore();
+
+        // 3. Definir la ruta de destino (PÚBLICA) - DEBE COINCIDIR CON LA WEB
+        const path = `/artifacts/${appId}/public/data/latest_forecast/analysis_doc`;
+        
+        // 4. Escribir el análisis completo en la base de datos (Omitido en este mock)
+        // await db.doc(path).set(newAnalysis);
+
+        console.log(`[SERVERLESS] ✅ Análisis generado y listo para ser leído en Firestore en la ruta: ${path}`);
+        console.log(`[SERVERLESS] Contenido guardado:`, newAnalysis.simple_summary_title);
+
+    } catch (error) {
+        console.error("[SERVERLESS] ❌ Error en el proceso de IA/Firestore:", error);
+    }
+}
+
+// Para hacer la prueba, usa un ID de App de ejemplo
+// mainFunction('default-app-id');
