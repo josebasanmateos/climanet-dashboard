@@ -1,97 +1,331 @@
-// --- ESTE ARCHIVO REPRESENTA EL CÓDIGO QUE CORRERÍA EN UN SERVIDOR SEGURO (Serverless Function) ---
-// Su ÚNICA función es calcular la previsión con la IA y guardarla en Firestore.
-// De esta forma, tu clave de API queda protegida y la web es instantánea.
-
-// Importaciones necesarias para Node.js (entorno Serverless)
-// En un entorno real, descomentarías estas líneas y harías la configuración.
-/* const { GoogleGenAI } = require("@google/genai");
-const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
-*/
-
-// Datos actuales de la estación (Esto vendría de tu base de datos o API)
-const currentWeatherData = {
-    temp: "23.5°C",
-    humidity: "65%",
-    pressure: "995.8 hPa", // Presión bajando rápidamente = riesgo de tormenta/cambio brusco
-    wind_speed: "35 km/h",
-    wind_direction: "Suroeste",
-    rain_last_hour: "0 mm",
-};
-
-// ** IMPORTANTE: Aquí se simula la llamada a la IA de Gemini
-async function generateForecast(data) {
-    // En un script real, aquí usarías tu API Key SECRETA para llamar a Gemini
-    /*
-    const ai = new GoogleGenAI({ apiKey: "TU_API_KEY_SECRETA_AQUI" });
-    const prompt = `Analiza...` // El prompt iría aquí
-    const response = await ai.models.generateContent({ ... });
-    return JSON.parse(response.text);
-    */
-
-    // El siguiente prompt es lo que le enviarías a Gemini
-    const prompt = `Analiza estos datos meteorológicos y genera un pronóstico estructurado para una estación climática doméstica.
-Datos: ${JSON.stringify(data)}
-Genera un objeto JSON con las siguientes claves:
-1. simple_summary_title: Título conciso (Máx 5 palabras)
-2. simple_summary_text: Resumen de la situación actual y la conclusión más importante.
-3. current_analysis: Análisis detallado de los datos (Presión, Viento, Temperatura), enfocándose en la dinámica atmosférica (ascenso/descenso de presión). Utiliza un lenguaje profesional y explicativo.
-4. forecast_6h_points: Array de 4 a 6 puntos clave para las próximas 6 horas, detallando cómo evolucionarán las condiciones.
-5. forecast_3d_points: Array de 4 a 6 puntos clave para los próximos 3 días.
-6. alert_level: Uno de 'stable' (estable), 'vigilance' (vigilancia), o 'alert' (alerta) basado en la peligrosidad.
-7. timestamp: Fecha y hora de la generación.
-`;
-
-    // --- SIMULACIÓN DEL RESULTADO DE LA IA (Reflejando un riesgo de tormenta) ---
-    const analysisResult = {
-        simple_summary_title: "ALERTA: Descenso Rápido de Presión",
-        simple_summary_text: "La presión ha caído a 995.8 hPa junto a vientos fuertes del Suroeste (35 km/h). Esto indica la inminente llegada de un frente frío y alta probabilidad de tormentas en las próximas horas.",
-        current_analysis: "Se observa un panorama dinámico y de riesgo. La caída rápida en la presión atmosférica (995.8 hPa) es el indicador principal de un cambio meteorológico brusco, con el acercamiento de un sistema de bajas presiones. Los vientos sostenidos del Suroeste (35 km/h) son típicos de los frentes de tormenta. La humedad es moderada, pero con la entrada de aire frío y la convergencia de masas de aire, la formación de nubes de desarrollo vertical (Cumulonimbus) es altamente probable.",
-        forecast_6h_points: [
-            "⛈️ **Riesgo ALTO de Tormentas:** La probabilidad de precipitaciones intensas comenzará en las próximas 2 horas.",
-            "📉 **Caída de Temperatura:** La temperatura descenderá bruscamente tras el inicio de la lluvia.",
-            "💨 **Rachas de Viento:** Se esperan ráfagas que podrían superar los 50 km/h al inicio de la tormenta.",
-            "☔️ **Acumulación de Lluvia:** Se prevén acumulaciones significativas durante las primeras 3 horas.",
-            "⚡️ **Actividad Eléctrica:** Alta posibilidad de actividad eléctrica intensa.",
-        ],
-        forecast_3d_points: [
-            "🌧️ **Día 1:** Clima inestable. Tras la tormenta inicial, se mantendrán chubascos intermitentes.",
-            "🌥️ **Día 2:** Mejora gradual. El cielo se nublará menos, pero la presión se mantendrá baja.",
-            "🌞 **Día 3:** Estabilidad. Se espera que la presión comience a subir por la tarde, augurando un clima soleado para el día siguiente.",
-            "🌡️ **Temperaturas:** Las temperaturas se mantendrán por debajo del promedio para la estación.",
-            "💨 **Viento:** Disminución progresiva del viento durante el período, volviendo a la calma en el Día 3.",
-        ],
-        alert_level: 'alert', // Esto cambia el color del dashboard a ROJO
-        timestamp: new Date().toLocaleDateString('es-ES') + ' ' + new Date().toLocaleTimeString('es-ES'),
-    };
-
-    return analysisResult;
-}
-
-// ** FUNCIÓN PRINCIPAL DE EJECUCIÓN (Llamada por el trigger de Serverless)
-async function mainFunction(appId) {
-    console.log(`[SERVERLESS] Iniciando cálculo de previsión para App ID: ${appId}`);
-
-    try {
-        // 1. Obtener los datos y generar el análisis (Llamada a Gemini)
-        const newAnalysis = await generateForecast(currentWeatherData);
-
-        // 2. Conectar a Firestore (En un entorno Serverless - Omitido en este mock)
-        // const db = getFirestore();
-
-        // 3. Definir la ruta de destino (PÚBLICA) - DEBE COINCIDIR CON LA WEB
-        const path = `/artifacts/${appId}/public/data/latest_forecast/analysis_doc`;
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estación ClimaNet - Previsión IA</title>
+    <!-- Carga de Tailwind CSS para el diseño responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* Estilos base y fuentes */
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        .card { transition: all 0.3s ease; }
+        .card:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
         
-        // 4. Escribir el análisis completo en la base de datos (Omitido en este mock)
-        // await db.doc(path).set(newAnalysis);
+        /* Clases para el nivel de alerta (cambian el color del borde y fondo) */
+        .alert-stable { border-color: #10b981; background-color: #ecfdf5; } 
+        .alert-vigilance { border-color: #f59e0b; background-color: #fffbeb; }
+        .alert-alert { border-color: #ef4444; background-color: #fef2f2; }
+        
+        /* Animación de carga (efecto skeleton) */
+        .skeleton { animation: pulse 1.5s infinite; background-color: #e2e8f0; border-radius: 4px; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Encabezado del Proyecto -->
+        <header class="text-center py-6 bg-white rounded-xl shadow-lg mb-6">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-blue-800">Estación ClimaNet</h1>
+            <p class="text-sm text-gray-500 mt-1">Dashboard con Análisis de IA en Tiempo Real</p>
+        </header>
 
-        console.log(`[SERVERLESS] ✅ Análisis generado y listo para ser leído en Firestore en la ruta: ${path}`);
-        console.log(`[SERVERLESS] Contenido guardado:`, newAnalysis.simple_summary_title);
+        <!-- Sección 1: Resumen de Previsión (Dinámico por Firestore) -->
+        <section id="simple-forecast" class="mb-6 p-4 rounded-xl shadow-md border-l-4 alert-stable">
+            <h2 class="text-xl font-bold text-green-700 mb-2 flex items-center" id="forecast-title">
+                <!-- Icono de advertencia/información (Riesgo/Vigilancia) -->
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.333 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <!-- Título del análisis IA (Inicialmente con efecto de carga) -->
+                <span id="simple-summary-title" class="skeleton w-4/5 h-6"></span>
+            </h2>
+            <p class="text-gray-700" id="simple-summary-text">
+                <span class="skeleton w-full h-4 block mb-1"></span>
+                <span class="skeleton w-3/4 h-4 block"></span>
+            </p>
+        </section>
 
-    } catch (error) {
-        console.error("[SERVERLESS] ❌ Error en el proceso de IA/Firestore:", error);
-    }
-}
+        <!-- Cuadrícula de Valores Actuales (Datos estáticos. El código Serverless los actualizaría si estuvieran en Firestore) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Temperatura</p>
+                <!-- ID para actualizar el dato si se recibe del servidor -->
+                <span class="text-4xl font-extrabold text-red-600" id="data-temp">25.0°C</span>
+            </div>
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Humedad</p>
+                 <!-- ID para actualizar el dato si se recibe del servidor -->
+                <span class="text-4xl font-extrabold text-blue-600" id="data-humidity">60%</span>
+            </div>
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Presión</p>
+                 <!-- ID para actualizar el dato si se recibe del servidor -->
+                <span class="text-4xl font-extrabold text-red-700" id="data-pressure">998.0</span><span class="text-lg text-gray-500 ml-1">hPa</span>
+            </div>
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Luminosidad</p>
+                 <!-- ID para actualizar el dato si se recibe del servidor -->
+                <span class="text-4xl font-extrabold text-gray-600" id="data-lux">300</span><span class="text-lg text-gray-500 ml-1">Lux</span>
+            </div>
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Viento</p>
+                <div class="flex items-end">
+                     <!-- ID para actualizar el dato si se recibe del servidor -->
+                    <span class="text-4xl font-extrabold text-indigo-600" id="data-wind-speed">35.0</span><span class="text-lg text-gray-500 ml-1">km/h (NO)</span>
+                </div>
+            </div>
+            <div class="card bg-white p-6 rounded-xl shadow-md">
+                <p class="text-sm font-medium text-gray-500">Lluvia</p>
+                 <!-- ID para actualizar el dato si se recibe del servidor -->
+                <span class="text-4xl font-extrabold text-cyan-600" id="data-rain">5.0</span><span class="text-lg text-gray-500 ml-1">mm</span>
+            </div>
+        </div>
 
-// Para hacer la prueba, usa un ID de App de ejemplo
-// mainFunction('default-app-id');
+        <!-- SECCIÓN DE ANÁLISIS Y PREVISIÓN DETALLADA (Lectura Firestore) -->
+        <section class="p-6 rounded-xl shadow-lg bg-white mb-6 border-l-4 border-gray-200" id="detailed-section-border">
+            <h2 class="text-2xl font-extrabold text-blue-800 mb-4 flex items-center">
+                <svg class="w-7 h-7 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Análisis Detallado
+            </h2>
+            
+            <!-- Resumen de la Situación Actual Dinámico -->
+            <h3 class="text-lg font-bold text-gray-700 mt-4 mb-2 border-b pb-2">Análisis de la Situación Actual</h3>
+            <div class="text-gray-700 mb-4 space-y-2" id="current-analysis">
+                <p><span class="skeleton w-full h-4 block"></span></p>
+            </div>
+            
+            <!-- Barra Interactiva de Previsión (Pestañas) -->
+            <div class="flex border-b">
+                <button id="tab-horas" onclick="showForecast('horas')" class="py-2 px-4 font-semibold text-lg border-b-2 border-blue-600 text-blue-600 hover:text-blue-800 transition duration-200 focus:outline-none">
+                    Próximas 6 Horas
+                </button>
+                <button id="tab-dias" onclick="showForecast('dias')" class="py-2 px-4 font-semibold text-lg border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition duration-200 focus:outline-none">
+                    Próximos 3 Días
+                </button>
+            </div>
+
+            <!-- Contenido de la Previsión 6 Horas Dinámico -->
+            <div id="content-horas" class="forecast-content mt-4 p-4 bg-gray-50 rounded-lg">
+                <h4 class="font-bold text-xl text-blue-700 mb-2">Previsión: 6 Horas</h4>
+                <ul class="list-disc list-inside space-y-2 text-gray-700 ml-2" id="forecast-6h">
+                    <li><span class="skeleton w-4/5 h-4 block"></span></li>
+                    <li><span class="skeleton w-3/4 h-4 block"></span></li>
+                </ul>
+            </div>
+
+            <!-- Contenido de la Previsión 3 Días Dinámico -->
+            <div id="content-dias" class="forecast-content hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                <h4 class="font-bold text-xl text-blue-700 mb-2">Previsión: 3 Días</h4>
+                <ul class="list-disc list-inside space-y-2 text-gray-700 ml-2" id="forecast-3d">
+                    <li><span class="skeleton w-4/5 h-4 block"></span></li>
+                    <li><span class="skeleton w-3/4 h-4 block"></span></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Pie de página con estado de actualización -->
+        <footer class="text-center mt-8 text-gray-500 text-sm" id="footer-time">
+            <span id="update-status">Cargando conexión segura...</span><br>
+            <!-- Muestra la ruta de la base de datos para depuración -->
+            <span id="firestore-path" class="text-xs">Ruta de Firestore: N/A</span>
+        </footer>
+    </div>
+
+    <!-- Script de Inicialización y Lógica de Firestore (Módulo JavaScript) -->
+    <script type="module">
+        // Importación de las librerías de Firebase (Auth y Firestore)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. Configuración de Firebase (variables globales proporcionadas por el entorno)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Ruta donde el script Serverless (IA) guarda el resultado (DEBE ser pública)
+        // Esta es la ruta que tu script Serverless debe usar para ESCRIBIR.
+        const firestorePath = `/artifacts/${appId}/public/data/latest_forecast/analysis_doc`;
+
+        let db, auth;
+        let isAuthReady = false;
+
+        // Estructura de análisis por defecto (mientras se cargan los datos)
+        const DEFAULT_ANALYSIS = {
+            simple_summary_title: "Datos Pendientes",
+            simple_summary_text: "Esperando el primer análisis del script Serverless (IA).",
+            current_analysis: "El sistema está conectado y en espera de que el proceso de servidor (IA) guarde los datos en la base de datos. Una vez que el servidor escriba el análisis aquí, la página se actualizará.",
+            forecast_6h_points: ["No hay previsión disponible.", "El sistema se actualizará pronto."],
+            forecast_3d_points: ["No hay previsión disponible.", "El sistema se actualizará pronto."],
+            alert_level: 'stable', 
+            timestamp: 'N/A'
+        };
+
+        // Función para inicializar Firebase y autenticar
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Muestra la ruta en el pie de página
+                document.getElementById('firestore-path').textContent = `Ruta de Firestore que lee: ${firestorePath}`;
+
+                // Autenticación
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                isAuthReady = true;
+                startListeningForAnalysis();
+
+            } catch (error) {
+                console.error("Error al inicializar o autenticar Firebase:", error);
+                renderLLMAnalysis(DEFAULT_ANALYSIS);
+                document.getElementById('update-status').textContent = `Error: No se pudo conectar a Firebase.`;
+            }
+        }
+
+        // 2. Escuchar Cambios en el Análisis Pre-Calculado (REAL-TIME)
+        function startListeningForAnalysis() {
+            // Se ejecuta solo si la autenticación ha finalizado
+            if (!isAuthReady || !auth.currentUser) return;
+
+            const docRef = doc(db, firestorePath);
+
+            // onSnapshot: Esta es la clave del tiempo real. Se dispara cada vez que el documento cambia.
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const analysis = docSnap.data();
+                    renderLLMAnalysis(analysis);
+                } else {
+                    console.log("Documento de análisis no encontrado. Usando datos por defecto.");
+                    renderLLMAnalysis(DEFAULT_ANALYSIS);
+                }
+            }, (error) => {
+                console.error("Error al escuchar cambios en Firestore:", error);
+                renderLLMAnalysis(DEFAULT_ANALYSIS);
+            });
+        }
+        
+        // 3. Renderizar la Previsión en el dashboard
+        function renderLLMAnalysis(analysis) {
+            // Quita el efecto "cargando" (skeleton)
+            document.querySelectorAll('.skeleton').forEach(el => el.classList.remove('skeleton', 'w-4/5', 'w-full', 'w-3/4', 'h-4', 'h-6'));
+            
+            if (!analysis) return; 
+
+            // A. Resumen Simple y Título
+            document.getElementById('simple-summary-title').textContent = analysis.simple_summary_title || 'N/A';
+            document.getElementById('simple-summary-text').textContent = analysis.simple_summary_text || 'N/A';
+
+            // B. Análisis Actual
+            document.getElementById('current-analysis').innerHTML = `<p>${analysis.current_analysis || 'N/A'}</p>`;
+
+            // C. Previsión 6 Horas
+            const list6h = document.getElementById('forecast-6h');
+            list6h.innerHTML = '';
+            if (Array.isArray(analysis.forecast_6h_points)) {
+                analysis.forecast_6h_points.forEach(point => {
+                    const li = document.createElement('li');
+                    // Usamos innerHTML por si la IA devuelve emojis o formato HTML
+                    li.innerHTML = point; 
+                    list6h.appendChild(li);
+                });
+            }
+
+            // D. Previsión 3 Días
+            const list3d = document.getElementById('forecast-3d');
+            list3d.innerHTML = '';
+            if (Array.isArray(analysis.forecast_3d_points)) {
+                analysis.forecast_3d_points.forEach(point => {
+                    const li = document.createElement('li');
+                    li.innerHTML = point;
+                    list3d.appendChild(li);
+                });
+            }
+            
+            // E. Alertas y Estilos (Cambia colores de la UI)
+            const alertLevel = analysis.alert_level || 'stable';
+            const forecastSection = document.getElementById('simple-forecast');
+            const detailedSection = document.getElementById('detailed-section-border');
+            
+            // Limpia clases anteriores
+            const allElementsToClean = [forecastSection, detailedSection];
+            allElementsToClean.forEach(el => {
+                 el.classList.remove('alert-stable', 'alert-vigilance', 'alert-alert', 'border-red-600', 'border-yellow-600', 'border-green-600');
+            });
+            document.getElementById('forecast-title').classList.remove('text-green-700', 'text-orange-700', 'text-red-700');
+
+
+            if (alertLevel === 'alert') {
+                forecastSection.classList.add('alert-alert');
+                document.getElementById('forecast-title').classList.add('text-red-700');
+                detailedSection.classList.add('border-red-600');
+            } else if (alertLevel === 'vigilance') {
+                forecastSection.classList.add('alert-vigilance');
+                document.getElementById('forecast-title').classList.add('text-orange-700');
+                detailedSection.classList.add('border-yellow-600');
+            } else { // 'stable'
+                forecastSection.classList.add('alert-stable');
+                document.getElementById('forecast-title').classList.add('text-green-700');
+                detailedSection.classList.add('border-green-600');
+            }
+            
+            document.getElementById('update-status').textContent = `Último Análisis IA: ${analysis.timestamp || 'Fecha no disponible'}`;
+
+            // Sincronizar el color de la pestaña activa con la alerta
+            const activePeriod = document.querySelector('.forecast-content:not(.hidden)') ? 
+                                 document.querySelector('.forecast-content:not(.hidden)').id.replace('content-', '') : 
+                                 'horas';
+            updateTabStyle(activePeriod, alertLevel);
+        }
+
+        // Función para actualizar los estilos de las pestañas
+        function updateTabStyle(period, alertLevel) {
+            const tabs = document.querySelectorAll('button[id^="tab-"]');
+            tabs.forEach(btn => {
+                btn.classList.remove('border-red-600', 'text-red-600', 'border-blue-600', 'text-blue-600'); 
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            
+            const activeTab = document.getElementById('tab-' + period);
+            activeTab.classList.remove('border-transparent', 'text-gray-500');
+
+            if (alertLevel === 'alert' || alertLevel === 'vigilance') {
+                activeTab.classList.add('border-red-600', 'text-red-600');
+            } else {
+                activeTab.classList.add('border-blue-600', 'text-blue-600');
+            }
+        }
+
+        // Control de pestañas
+        function showForecast(period) {
+            document.querySelectorAll('.forecast-content').forEach(el => {
+                el.classList.add('hidden');
+            });
+            document.getElementById('content-' + period).classList.remove('hidden');
+
+            // Intenta obtener el nivel de alerta para colorear la pestaña
+            let alertLevel = 'stable';
+            if (document.getElementById('forecast-title').classList.contains('text-red-700')) {
+                alertLevel = 'alert';
+            } else if (document.getElementById('forecast-title').classList.contains('text-orange-700')) {
+                alertLevel = 'vigilance';
+            }
+
+            updateTabStyle(period, alertLevel);
+        }
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+             showForecast('horas'); 
+             initializeFirebase();
+        });
+    </script>
+</body>
+</html>
